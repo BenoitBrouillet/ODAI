@@ -1137,7 +1137,7 @@ class SystemSetup:
 
       def find_and_optimize_from_saddle_points(self, current_node, system_tree, efl, base_file_path, depth, reference_surface):
         print_subheader(f"Optimizing from Saddle Points - Depth {depth}, Ref. Surface {reference_surface}")
-        
+
         # Perform Saddle Point Scan
         self.switch_ref_mode('curvature')
         sps = self.perform_sp_scan(reference_surface, efl, debug=False)
@@ -1154,57 +1154,55 @@ class SystemSetup:
             sp_merit = self.sp_create_and_increase_thickness(sp, reference_surface, current_node.system_params['lens_thickness'], sp_filename, efl)
             self.update_all_surfaces_from_codev(debug=False)
 
-            # Save the state after creating and increasing thickness
-            sp_state = self.save_system_parameters()
+            if sp_merit is None or current_node.merit_function is None:
+                print(f"  Saddle Point {i+1} did not meet criteria, skipping.")
 
-            # Create a node for the saddle point and add it to the tree
-            sp_node = SystemNode(system_params=current_node.system_params, optical_system_state=sp_state, seq_file_path=sp_filename,
-                                  parent=current_node, merit_function=sp_merit, is_optimized=False, depth=depth+1)
-            current_node.add_child(sp_node)
-            system_tree.add_node(sp_node)
-
-            # Surface numbers (list like 3,4 for ref 2)
-            surface_numbers = [reference_surface + 1, reference_surface + 2]
-
-            # Modify curvatures for two systems around the saddle point
-            system1_params, system2_params = self.modify_curvatures_for_saddle_point(surface_numbers, current_node.system_params['epsilon'], efl, debug=False)
-
-            # Optimize and Save System 1
-            self.load_system_parameters(system1_params)
-            system1_filename = f"{base_file_path}/D{depth+1}_Node{sp_node.id}_SP{i+1}_OptA.seq"
-            self.increase_thickness_and_optimize(current_node.system_params['lens_thickness_steps'], current_node.system_params['air_distance_steps'], reference_surface+1
-                                                 , reference_surface, efl, system1_filename)
-            system1_state = self.save_system_parameters()
-            system1_merit_function = self.error_fct(efl, constrained=False)
-            system1_efl = self.get_efl_from_codev()
-
-            # For System 1
-            if system1_merit_function is None or system1_merit_function > 2*sp_merit:
-                print(f"Optimized System 1 from Saddle Point {i+1} did not meet criteria, skipping.")
+            elif sp_merit>2*current_node.merit_function:
+                print(f"  Saddle Point {i+1} did not meet criteria, skipping.")
+                
             else:
-          
+
+                # Save the state after creating and increasing thickness
+                sp_state = self.save_system_parameters()
+
+                # Create a node for the saddle point and add it to the tree
+                sp_node = SystemNode(system_params=current_node.system_params, optical_system_state=sp_state, seq_file_path=sp_filename,
+                                      parent=current_node, merit_function=sp_merit, is_optimized=False, depth=depth+1)
+                current_node.add_child(sp_node)
+                system_tree.add_node(sp_node)
+
+                # Surface numbers (list like 3,4 for ref 2)
+                surface_numbers = [reference_surface + 1, reference_surface + 2]
+
+                # Modify curvatures for two systems around the saddle point
+                system1_params, system2_params = self.modify_curvatures_for_saddle_point(surface_numbers, current_node.system_params['epsilon'], efl, debug=False)
+
+                # Optimize and Save System 1
+                self.load_system_parameters(system1_params)
+                system1_filename = f"{base_file_path}/D{depth+1}_Node{sp_node.id}_SP{i+1}_OptA.seq"
+                self.increase_thickness_and_optimize(current_node.system_params['lens_thickness_steps'], current_node.system_params['air_distance_steps'], reference_surface+1
+                                                    , reference_surface, efl, system1_filename)
+                system1_state = self.save_system_parameters()
+                system1_merit_function = self.error_fct(efl, constrained=False)
+                system1_efl = self.get_efl_from_codev()
+
+              
                 system1_node = SystemNode(system_params=current_node.system_params, optical_system_state=system1_state, seq_file_path=system1_filename, 
-                                          parent=sp_node, merit_function=system1_merit_function, efl=system1_efl, is_optimized=True, depth=depth+1)
+                                              parent=sp_node, merit_function=system1_merit_function, efl=system1_efl, is_optimized=True, depth=depth+1)
                 sp_node.add_child(system1_node)
                 system_tree.add_node(system1_node)
 
-            # Restore original state and Optimize and Save System 2
-            self.load_system_parameters(system2_params)
-            system2_filename = f"{base_file_path}/D{depth+1}_Node{sp_node.id}_SP{i+1}_OptB.seq"
-            self.increase_thickness_and_optimize(current_node.system_params['lens_thickness_steps'], current_node.system_params['air_distance_steps'], reference_surface+1
-                                                 , reference_surface, efl, system2_filename)
-            system2_state = self.save_system_parameters()
-            system2_merit_function = self.error_fct(efl, constrained=False)
-            system2_efl = self.get_efl_from_codev()
-
-            # Optimize and Save System 2, including merit function checks...
-            # For System 2
-            if system2_merit_function is None or system2_merit_function > 2*sp_merit:
-                print(f"Optimized System 2 from Saddle Point {i+1} did not meet criteria, skipping.")
-            else:
+                # Restore original state and Optimize and Save System 2
+                self.load_system_parameters(system2_params)
+                system2_filename = f"{base_file_path}/D{depth+1}_Node{sp_node.id}_SP{i+1}_OptB.seq"
+                self.increase_thickness_and_optimize(current_node.system_params['lens_thickness_steps'], current_node.system_params['air_distance_steps'], reference_surface+1
+                                                    , reference_surface, efl, system2_filename)
+                system2_state = self.save_system_parameters()
+                system2_merit_function = self.error_fct(efl, constrained=False)
+                system2_efl = self.get_efl_from_codev()
 
                 system2_node = SystemNode(system_params=current_node.system_params, optical_system_state=system2_state, seq_file_path=system2_filename,
-                                          parent=sp_node, merit_function=system2_merit_function, efl=system2_efl, is_optimized=True, depth=depth+1)
+                                              parent=sp_node, merit_function=system2_merit_function, efl=system2_efl, is_optimized=True, depth=depth+1)
                 sp_node.add_child(system2_node)
                 system_tree.add_node(system2_node)
 
